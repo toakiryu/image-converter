@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Converter</title>
+    <style>
+        #drop-zone {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed #007bff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        #drop-zone.hover {
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        button {
+            margin-top: 10px;
+        }
+
+        .status-message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .progress {
+            width: 100%;
+            height: 5px;
+            background-color: #f3f3f3;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            width: 0;
+        }
+
+        #download-link {
+            margin-top: 20px;
+        }
+
+        #file-list {
+            margin-top: 10px;
+            list-style-type: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Image Converter</h1>
+    <form id="convert-form">
+        <label for="format">Choose Format:</label>
+        <select id="format" name="format">
+            <option value="jpeg">JPEG</option>
+            <option value="png">PNG</option>
+            <option value="webp">WEBP</option>
+        </select>
+        <br>
+        <label id="drop-zone" for="images">
+            <span>Drag & Drop Images Here</span>
+        </label>
+        <input type="file" id="images" name="images" multiple accept="image/*">
+        <br>
+        <button type="submit">Convert</button>
+
+        <!-- ファイルリスト -->
+        <ul id="file-list"></ul>
+
+        <!-- 進行状況バー -->
+        <div class="progress">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+
+        <!-- 状態メッセージ -->
+        <div id="status-message" class="status-message"></div>
+    </form>
+
+    <div id="download-link" style="display:none;">
+        <button id="download-button">Download Converted Files</button>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('images');
+        const form = document.getElementById('convert-form');
+        const progressBar = document.getElementById('progress-bar');
+        const statusMessage = document.getElementById('status-message');
+        const downloadLink = document.getElementById('download-link');
+        const downloadButton = document.getElementById('download-button');
+        const fileList = document.getElementById('file-list');
+
+        let filesArray = [];
+
+        // ドラッグ＆ドロップのイベントを処理
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('hover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('hover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('hover');
+            const files = Array.from(e.dataTransfer.files);
+            addFilesToList(files);
+        });
+
+        fileInput.addEventListener('change', () => {
+            const files = Array.from(fileInput.files);
+            addFilesToList(files);
+        });
+
+        // ファイルをリストに追加
+        function addFilesToList(files) {
+            files.forEach(file => {
+                if (!filesArray.some(f => f.name === file.name)) {
+                    filesArray.push(file);
+                }
+            });
+            updateFileList();
+        }
+
+        // ファイルリストを表示
+        function updateFileList() {
+            fileList.innerHTML = ''; // リストをクリア
+            filesArray.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.textContent = file.name;
+
+                // 削除ボタンを作成
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.style.marginLeft = '10px';
+                deleteButton.addEventListener('click', () => {
+                    removeFileFromList(index);
+                });
+
+                li.appendChild(deleteButton);
+                fileList.appendChild(li);
+            });
+        }
+
+        // ファイルをリストから削除
+        function removeFileFromList(index) {
+            filesArray.splice(index, 1); // ファイル配列から削除
+            updateFileList(); // リストを更新
+        }
+
+        // フォーム送信
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (filesArray.length === 0) {
+                alert('No files to convert.');
+                return;
+            }
+
+            progressBar.style.width = '0';
+            statusMessage.textContent = 'Uploading...';
+
+            const formData = new FormData();
+            const format = document.getElementById('format').value;
+
+            formData.append('format', format);
+            filesArray.forEach(file => {
+                const encodedFileName = encodeURIComponent(file.name);
+                const fileWithEncodedName = new File([file], encodedFileName, { type: file.type });
+                formData.append('images', fileWithEncodedName);
+            });
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Progress': 'true'
+                    },
+                });
+
+                const data = await response.json();
+
+                filesToDownload = data.files;
+                statusMessage.textContent = 'Conversion Complete!';
+                statusMessage.className = 'status-message success';
+
+                downloadLink.style.display = 'block';
+            } catch (error) {
+                statusMessage.textContent = `Error: ${error.message}`;
+                statusMessage.className = 'status-message error';
+            }
+        });
+
+        // ダウンロードボタンの処理
+        downloadButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: filesToDownload }),
+                });
+
+                if (!response.ok) throw new Error('Failed to download files.');
+
+                // サーバーからZIPファイルをダウンロード
+                const blob = await response.blob();
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'converted_files.zip';
+                link.click();
+            } catch (error) {
+                alert('Download failed: ' + error.message);
+            }
+        });
+    </script>
+</body>
+
+</html>
